@@ -4,8 +4,9 @@
 //
 // Sōgyo (双魚) · Model 13: the RTH gap's twin midpoints. At 09:30, CE1 = (prior 16:14 close + 09:30 open) ÷ 2 and
 // CE2 = (prior 16:59 close + 09:30 open) ÷ 2; the zone between them is drawn and carried right. The card reads the gap and
-// the overnight range against the RTH ATR and grades the zone: GREEN (valid confluence), RED (a waypoint to the fill),
-// SPLIT (the open sits between the two closes: skip) or NEUTRAL (don't weight).
+// the overnight range against the RTH ATR and grades the day: GREEN (quiet: the gap fills more often), RED (big gap: the zone
+// breaks 2 in 3), SPLIT (the open sits between the two closes: skip) or NEUTRAL (a coin flip at the zone). Figures: NQ 1-minute,
+// every day 2018 – 9 Oct 2026 (2,011 days).
 // Concepts: ICT (Michael J. Huddleston), consequent encroachment of the RTH gap. Written from scratch.
 
 indicator("Sōgyo CE1 / CE2 Zone", "Sōgyo", overlay = true, max_boxes_count = 500, max_lines_count = 500, max_labels_count = 500)
@@ -15,7 +16,7 @@ tz = "America/New_York"
 // ═══════════════════════════════════════════════════════════════ Inputs
 var g_V = "View"
 themeI   = input.string("Auto", "Theme", options = ["Auto", "Dark", "Light"], group = g_V, tooltip = "Auto follows the chart background. The card, and text left at its default colour, follow it.", display = display.none)
-layI     = input.string("Desktop", "Layout", options = ["Desktop", "Mobile"], group = g_V, tooltip = "Desktop: every row of the card. Mobile: a four-row card for a phone screen; the full wording stays in the tooltips. For a phone, use a separate chart layout set to Mobile, since layouts sync across devices.", display = display.none)
+layI     = input.string("Desktop", "Layout", options = ["Desktop", "Mobile"], group = g_V, tooltip = "Both are three rows: the header with the context, the zone's width, and the context read. Mobile drops the wording beside the width. CE1 / CE2, the gap, the overnight range and the ATR sit in the tooltips. For a phone, use a separate chart layout set to Mobile, since layouts sync across devices.", display = display.none)
 crdSzI   = input.string("Small", "Card text", options = ["Tiny", "Small", "Normal"], group = g_V, display = display.none)
 lblSize  = input.string("Small", "Label text", options = ["Tiny", "Small", "Normal"], group = g_V, display = display.none)
 txtColI  = input.color(#000001, "Label colour", group = g_V, tooltip = "Left at the default it follows the theme; pick any colour to override.", display = display.none)
@@ -151,7 +152,7 @@ if rthStart
         onPts  := onHi - onLo
         split  := math.sign(O - c1) != math.sign(O - c2)
         if not na(atrNow)
-            ctx := split ? "SPLIT — skip" : gapPts / atrNow > gapRed ? "RED — waypoint to fill" : onPts / atrNow <= onGreen ? "GREEN — valid confluence" : "NEUTRAL — don't weight"
+            ctx := split ? "SPLIT · skip" : gapPts / atrNow > gapRed ? "RED · breaks 2 in 3" : onPts / atrNow <= onGreen ? "GREEN · fill 74%" : "NEUTRAL · coin flip"
         else
             ctx := "— (ATR building)"
         wide  := math.abs(ce1 - ce2) / O * 100 >= wideMin
@@ -249,7 +250,7 @@ posOf(string s) =>
         "Bottom left"   => position.bottom_left
         "Bottom center" => position.bottom_center
         => position.bottom_right
-CR = mob ? 4 : 9
+CR = 3
 var table t   = na
 var int   tOf = 0
 if barstate.isfirst and showTbl
@@ -262,12 +263,6 @@ if barstate.isfirst and showTbl
     t.merge_cells(2, tOf + CR - 1, 4, tOf + CR - 1)
 cl(int c, int r, string s, color fg, color bg, string tip = "", string ha = text.align_left, bool b = false) =>
     t.cell(c, r, s, text_color = fg, bgcolor = bg, text_size = crdSz, text_halign = ha, tooltip = tip, text_font_family = font.family_monospace, text_formatting = b ? text.format_bold : text.format_none)
-row(int r, string key, string txt, string v, string aside, string tip, color vfg = na, color afg = na) =>
-    t.cell(0, r, "", bgcolor = cAcc, width = 0.25)
-    cl(1, r, key, cMu, cBody, tip, text.align_center)
-    cl(2, r, txt, cTx, cBody, tip)
-    cl(3, r, v, na(vfg) ? cTx : vfg, cBody, tip, text.align_center, true)
-    cl(4, r, aside, na(afg) ? cMu : afg, cBody, tip, text.align_center)
 f(x) => na(x) ? "—" : str.tostring(x, "#,##0.00")
 fA(x) => na(x) ? "—" : str.tostring(x, "0.00") + "×"
 if showTbl and barstate.islast and not na(t)
@@ -276,30 +271,18 @@ if showTbl and barstate.islast and not na(t)
     string cw  = str.startswith(ctx, "GREEN") ? "GREEN" : str.startswith(ctx, "RED") ? "RED" : str.startswith(ctx, "SPLIT") ? "SPLIT" : str.startswith(ctx, "NEUTRAL") ? "NEUTRAL" : "ATR…"
     color  pbg = cw == "GREEN" ? cOk : cw == "RED" ? cRed : cw == "SPLIT" ? #ff9800 : cw == "NEUTRAL" ? #7e57c2 : cNeu
     color  pfg = cw == "ATR…" ? cTx : #ffffff
-    string ctxTip = "GREEN: overnight range ≤ " + str.tostring(onGreen, "0.00") + " ATR, a valid confluence. RED: gap > " + str.tostring(gapRed, "0.00") + " ATR, the zone is a waypoint to the full fill. SPLIT: the 09:30 open sits between the 16:14 and 16:59 closes, skip. NEUTRAL: neither, don't weight it."
-    string atrTip = "RTH ATR(" + str.tostring(length) + ") = the average high − low of the last " + str.tostring(length) + " RTH sessions (09:30–16:14), read from 15-minute bars" + (na(atrHTF) ? ": " + str.tostring(atrN) + " of " + str.tostring(length) + " sessions loaded so far." : ".")
+    // the context read: NQ 1-minute, every day 2018 – 9 Oct 2026 (2,011 days; 2019–21 had never been tested before)
+    string ctxTip = cw == "GREEN" ? "GREEN, a quiet open: gap ≤ " + str.tostring(gapRed, "0.00") + " ATR and overnight range ≤ " + str.tostring(onGreen, "0.00") + " ATR. NQ 2018–26: the zone was reached in RTH on 87% of these days and the full gap filled on 74% (neutral days: 81% / 64%). As a wall at the first NY AM touch it held 60%, but only 50% in 2019–21, the years the rule was not fitted on, so don't lean on it as a wall." : cw == "RED" ? "RED, a big gap: over " + str.tostring(gapRed, "0.00") + " ATR. NQ 2018–26: at the first NY AM touch the zone broke toward the fill 67% of the time (held 33%, under 50% in every period). It was reached in RTH on only 50% of these days and the full gap filled on 24%: a waypoint, rarely the end." : cw == "SPLIT" ? "SPLIT: the 09:30 open sits between the 16:14 and 16:59 closes, so CE1 and CE2 straddle the open. Both were touched on 91% of these days (NQ 2018–26), usually at once: skip." : cw == "NEUTRAL" ? "NEUTRAL: neither quiet nor a big gap. NQ 2018–26: at the first NY AM touch the zone held 50%, a coin flip; it was reached in RTH on 81% of these days and the gap filled on 64%." : "The context needs the RTH ATR: " + str.tostring(atrN) + " of " + str.tostring(length) + " sessions loaded."
+    string zTip = "CE1 " + f(ce1) + " = (16:14 close + 09:30 open) ÷ 2 · CE2 " + f(ce2) + " = (16:59 close + 09:30 open) ÷ 2. Width = |CE1 − CE2|; wide = at least " + str.tostring(wideMin, "0.00") + "% of price. Gap " + f(gapPts) + " pts (" + fA(gA) + " ATR), overnight 18:00–09:29 " + f(onPts) + " pts (" + fA(oA) + " ATR), RTH ATR(" + str.tostring(length) + ") " + f(atrNow) + "."
     int r = tOf
     t.cell(0, r, "", bgcolor = cAcc, width = 0.25)
-    cl(1, r, "◆ SŌGYO · CE1 / CE2", #ffffff, cAcc, "Sōgyo, Model 13: the RTH gap's twin midpoints, formed at 09:30.", text.align_left, true)
+    cl(1, r, "◆ SŌGYO" + (fDate == "" or mob ? "" : " · " + fDate), #ffffff, cAcc, "Sōgyo, Model 13: the RTH gap's twin midpoints, formed at 09:30.", text.align_left, true)
     cl(4, r, cw, pfg, pbg, ctxTip, text.align_center, true)
-    if not mob
-        t.cell(0, r + 1, "", bgcolor = cAcc, width = 0.25)
-        cl(1, r + 1, "", cMu, cBody2)
-        cl(2, r + 1, "formed " + (fDate == "" ? "—" : fDate), cMu, cBody2)
-        cl(3, r + 1, "pts", cMu, cBody2, "", text.align_center)
-        cl(4, r + 1, "ATR", cMu, cBody2, "", text.align_center)
-        row(r + 2, "CE1", "16:14 close ↔ 09:30", f(ce1), "", "CE1 = (prior RTH close at 16:14 + 09:30 open) ÷ 2.")
-        row(r + 3, "CE2", "16:59 close ↔ 09:30", f(ce2), "", "CE2 = (prior RTH2 close at 16:59 + 09:30 open) ÷ 2.")
-        row(r + 4, "WIDTH", "zone" + (wide ? " · wide" : ""), f(math.abs(ce1 - ce2)), na(O) ? "" : str.tostring(math.abs(ce1 - ce2) / O * 100, "0.00") + "%", "Distance between CE1 and CE2. Wide = at least " + str.tostring(wideMin, "0.00") + "% of price.", na, wide ? cHot : na)
-        row(r + 5, "GAP", "09:30 vs prior closes", f(gapPts), fA(gA), "Gap = |09:30 open − the midpoint of the two prior closes|. Red above " + str.tostring(gapRed, "0.00") + " ATR (" + f(gapRed * atrNow) + " pts).", na, nz(gA) > gapRed ? cRed : na)
-        row(r + 6, "ON", "overnight 18:00–09:29", f(onPts), fA(oA), "Overnight range, 18:00 → 09:29. Green at or under " + str.tostring(onGreen, "0.00") + " ATR (" + f(onGreen * atrNow) + " pts).", na, not na(oA) and oA <= onGreen ? cOk : na)
-        row(r + 7, "ATR", "RTH ATR(" + str.tostring(length) + ")", f(atrNow), na(atrHTF) ? str.tostring(atrN) + "/" + str.tostring(length) : "red " + f(gapRed * atrNow), atrTip)
-        t.cell(0, r + 8, "", bgcolor = cAcc, width = 0.25)
-        cl(1, r + 8, "CTX", cMu, cBody, ctxTip, text.align_center)
-        cl(2, r + 8, ctx, cw == "ATR…" ? cSub : pbg, cBody, ctxTip, text.align_left, true)
-    else
-        row(r + 1, "CE", f(ce1) + " / " + f(ce2), f(math.abs(ce1 - ce2)), "", "CE1 / CE2 and the zone's width in points.")
-        row(r + 2, "GAP·ON", fA(gA) + " · " + fA(oA), "", "", "Gap and overnight range in RTH ATR. " + ctxTip, na, na)
-        t.cell(0, r + 3, "", bgcolor = cAcc, width = 0.25)
-        cl(1, r + 3, "CTX", cMu, cBody, ctxTip, text.align_center)
-        cl(2, r + 3, ctx, cw == "ATR…" ? cSub : pbg, cBody, ctxTip, text.align_left, true)
+    t.cell(0, r + 1, "", bgcolor = cAcc, width = 0.25)
+    cl(1, r + 1, "WIDTH", cMu, cBody, zTip, text.align_center)
+    cl(2, r + 1, mob ? "" : "zone" + (wide ? " · wide" : ""), cTx, cBody, zTip)
+    cl(3, r + 1, f(math.abs(ce1 - ce2)), cTx, cBody, zTip, text.align_center, true)
+    cl(4, r + 1, na(O) ? "" : str.tostring(math.abs(ce1 - ce2) / O * 100, "0.00") + "%", wide ? cHot : cMu, cBody, zTip, text.align_center)
+    t.cell(0, r + 2, "", bgcolor = cAcc, width = 0.25)
+    cl(1, r + 2, "CTX", cMu, cBody, ctxTip, text.align_center)
+    cl(2, r + 2, ctx, cw == "ATR…" ? cSub : pbg, cBody, ctxTip, text.align_left, true)
